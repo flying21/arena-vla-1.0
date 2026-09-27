@@ -1,0 +1,68 @@
+# 麻雀虽小智能科技（武汉）有限公司
+# =============================================================================
+# ARENA 默认配置（结构对应 arena/config.py 中的四个数据类）
+# =============================================================================
+# 用法：
+#   from arena.config import ArenaConfig
+#   cfg = ArenaConfig.from_yaml("arena/configs/default.yaml")
+#
+# 说明：本文件是给人看/给人改的模板。加载时缺失的字段会自动回退到数据类默认值，
+#       因此可以只保留你关心的几节。
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# 策略服务器（arena.config.ServerConfig）
+# ---------------------------------------------------------------------------
+server:
+  backend: mock            # mock | unifolm_vla | openpi | http
+                           #   mock         = 确定性假动作，无需 GPU
+                           #   unifolm_vla  = 本地 checkpoint（需 GPU + unifolm-vla 环境）
+                           #   openpi       = 转发到 OpenPI 服务（明文 JSON 协议）
+                           #   http         = 通用转发（json_numpy 双重编码）
+  host: 0.0.0.0            # 监听所有网卡；真机客户端常需跨机访问
+  port: 8777               # 与官方 UnifoLM-VLA 部署服务器保持一致
+  ckpt_path: ""            # unifolm_vla 后端必填；其上一级目录需含 config.yaml 与 dataset_statistics.json
+  vlm_pretrained_path: null  # 覆盖 checkpoint 内记录的 VLM 主干路径
+  unnorm_key: new_embodiment # 反归一化所用的数据集键（多任务 checkpoint 需指定）
+  use_bf16: true           # bfloat16 推理，显存减半
+  center_crop: true        # 图像中心裁剪（与官方服务端预处理一致）
+  device: cuda:0           # 无 CUDA 时后端会自动回退 CPU 并在 /health 中标注
+  upstream_url: null       # openpi / http 后端的转发目标
+
+# ---------------------------------------------------------------------------
+# 策略客户端（arena.config.ClientConfig）
+# ---------------------------------------------------------------------------
+client:
+  server_url: http://127.0.0.1:8777/act   # /act 端点完整地址
+  timeout_s: 10.0                         # 单次请求超时
+  retries: 3                              # 失败重试次数（线性退避 0.05×attempt）
+  action_chunk_size: 8                    # 期望的动作块长度（记录用途）
+
+# ---------------------------------------------------------------------------
+# 具身适配器（arena.config.AdapterConfig）
+# ---------------------------------------------------------------------------
+adapter:
+  robot_type: unitree_g1   # 仅用于日志/路由标识
+  image_size: 224          # 送入模型的正方形边长（与 VLA 训练一致）
+  # ⚠ action_dim / proprio_dim 不参与任何计算，只是参考占位值。
+  #   适配器的裁剪/填充完全以传入数组的实际形状为准。
+  #   真实维度：LIBERO 7/8、G1(EE6D) 23/23、GR1T2 微波炉 36、G1 关节空间 16/16。
+  #   对某个 checkpoint 而言，权威值在 unifolm_vla.rlds_dataloader.constants。
+  action_dim: 7
+  proprio_dim: 8
+  normalization_type: bounds_q99   # normal | bounds | bounds_q99
+  joint_lower: null        # 可选关节下限；null = 不做动作裁剪
+  joint_upper: null        # 可选关节上限
+
+# ---------------------------------------------------------------------------
+# Sim-to-Real 域随机化（arena.config.Sim2RealConfig）
+# ---------------------------------------------------------------------------
+# 实际扰动幅度来自 arena/sim2real.py::CURRICULUM[level]，本节的 level 只负责选等级：
+#   L1 = 严格恒等（基线仿真，不改变任何数据）
+#   L2/L3/L4 = 逐步增强光照、纹理、相机、动力学、观测噪声与动作延迟
+sim2real:
+  level: 1                 # 1..4
+  observation_noise: 0.0   # 保留字段；实际由 CURRICULUM 决定
+  action_delay_steps: 0    # 保留字段；实际由 CURRICULUM 决定
+  image_augmentation: false # 预留开关
+  seed: 42                 # 随机种子，保证扰动可复现
