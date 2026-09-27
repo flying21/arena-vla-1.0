@@ -1,0 +1,28 @@
+# 麻雀虽小智能科技（武汉）有限公司
+# =============================================================================
+# 【中文说明】Accelerate + DeepSpeed ZeRO-2 启动配置（推荐使用）
+# =============================================================================
+# accelerate launch 读取本文件来配置分布式训练。特点：
+#   它把 DeepSpeed 的细粒度参数**外置**到 ds_config.yaml（见下一行），
+#   因此本文件只保留 Accelerate 层面的编排参数。
+#
+# 与同目录其它两个文件的关系：
+#   deepspeed_zero2.yaml  ← 本文件：引用外置 ds_config.yaml（训练脚本用这个）
+#   zero2.yaml            —— 自包含写法，ZeRO 参数直接内联（未引用外部 JSON）
+#   ds_config.yaml        —— DeepSpeed 侧参数（JSON 内容，不可加注释）
+#   zero3.json            —— ZeRO-3 备选方案（当前未使用）
+# =============================================================================
+
+compute_environment: LOCAL_MACHINE          # 单机多卡
+debug: false
+
+deepspeed_config:
+  # 指向 ZeRO-2 的具体参数文件（stage/桶大小/通信重叠等都在其中）
+  # ★ 该文件内容是 JSON（虽以 .yaml 结尾），因此无法加注释
+  deepspeed_config_file: "./src/unifolm_vla/config/deepseeds/ds_config.yaml"
+  deepspeed_multinode_launcher: standard
+  zero3_init_flag: false                     # 不启用 ZeRO-3 初始化（本配置用 ZeRO-2）
+
+distributed_type: DEEPSPEED                  # 使用 DeepSpeed 后端
+num_machines: 1                              # 机器数
+num_processes: 8                             # 进程数 = GPU 数；按实际卡数调整

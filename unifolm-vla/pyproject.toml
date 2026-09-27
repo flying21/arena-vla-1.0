@@ -1,0 +1,159 @@
+# 麻雀虽小智能科技（武汉）有限公司
+# =============================================================================
+# 【中文说明】UnifoLM-VLA 打包与依赖配置
+# =============================================================================
+# 安装（按上游 README）：
+#   conda create -n unifolm-vla python==3.10.18 && conda activate unifolm-vla
+#   pip install --no-deps "lerobot @ git+https://github.com/huggingface/lerobot.git@0878c68"
+#   pip install -e .
+#   pip install "flash-attn==2.5.6" --no-build-isolation
+#
+# ★ 三个必须注意的地方
+#
+# 1) torch==2.5.1 / transformers==4.52.3 / numpy==1.26.4 等都被**精确锁定**。
+#    这是有意为之：Qwen2.5-VL 的 processor 接口、Diffusers 的
+#    Attention/FeedForward 组件签名在不同版本间会变，放开版本极易踩坑。
+#
+# 2) CUDA 版本要求：项目基于 **CUDA 12.4** 构建（见上游 README），
+#    版本不匹配时钟 flash-attn 编译会失败。
+#
+# 3) flash-attn 不在此依赖列表里，需**单独安装**（且要 --no-build-isolation），
+#    因为它的编译依赖与 pip 的构建隔离机制冲突。
+#    注意 QWen2_5.py 里硬编码了 attn_implementation="flash_attention_2"，
+#    所以 flash-attn 是**必需**的，装不上就无法加载主干。
+#
+# 【为什么同时依赖 tensorflow 与 torch】
+#   数据侧：RLDS/TFDS/dlimp 是 TensorFlow 生态（数据读取与统计量计算）；
+#   模型侧：torch 生态（Qwen2.5-VL + DiT 动作头）。
+#   部署侧 run_real_eval_server.py 还用 TF 的 image.resize(lanczos3) 做图像
+#   预处理，以**严格复现训练时的缩放实现**（不同库的插值结果有细微差异）。
+#
+# 【为什么依赖 h5py / pyarrow / fastparquet / av / decord】
+#   覆盖数据准备链路：LeRobot(parquet+视频) -> HDF5 -> RLDS。
+#   av / decord / eva-decord 用于解码 LeRobot 数据集里的视频帧。
+# =============================================================================
+
+[project]
+name = "unifolm_vla"
+authors = [
+    {name="Unitree Embodied AI R&D Team", email="rd_jjh@unitree.com"  }
+]
+description = "unifolm_vla-0"
+version = "0.0.1"
+readme = "README.md"
+requires-python = ">=3.10"
+keywords = ["vision-language-actions models", " robotic manipulation", "multimodal pretraining", "robot learning", "generative models"]
+license = { text = "BSD-3-Clause" }
+
+# ---------------------------------------------------------------------------
+# 依赖清单（★ 版本锁定是有意的，不建议放开）
+# ---------------------------------------------------------------------------
+dependencies = [
+    # ---- 模型主干与训练框架 ----
+    "transformers==4.52.3",              # Qwen2.5-VL 所需版本
+    "accelerate==1.5.2",                 # 分布式启动
+    "torch==2.5.1",                      # 与 CUDA 12.4 匹配
+    "torchvision==0.20.1",
+    "deepspeed==0.16.9",                 # ZeRO-2 训练
+    "diffusers==0.35.1",                 # DiT 用的 Attention/FeedForward/TimestepEmbedding
+    "qwen-vl-utils",                     # process_vision_info：视觉输入打包
+    "transformers_stream_generator==0.0.4",
+    "tiktoken",
+    "einops",
+    "omegaconf",                         # 训练配置合并
+    "tyro==0.9.35",
+    "numpy==1.26.4",                     # 锁 1.x：TF 2.15 与部分依赖尚不兼容 numpy 2.x
+    "scipy",
+    # ---- 数据管线：TF 生态 ----
+    "tensorflow==2.15.0",
+    "tensorflow_datasets==4.9.3",        # TFDS：RLDS 数据读取与构建
+    "tensorflow_graphics==2021.12.3",
+    "dlimp @ git+https://github.com/kvablack/dlimp@d08da3852c149548aaa8551186d619d87375df08",
+    "pyarrow==15.0.1",                   # LeRobot 的 parquet
+    "fastparquet==2024.11.0",
+    "h5py",                              # HDF5 中间格式
+    "av",                                # 视频解码
+    "decord==0.6.0",
+    "eva-decord==0.6.1",
+    "datasets==3.6.0",
+    "huggingface_hub==0.34.4",
+    "mujoco==3.3.5",                     # 仿真后端（LIBERO 等）
+    # ---- 图像与可视化 ----
+    "pillow==11.3.0",
+    "albumentations==1.4.18",            # 数据增强
+    "matplotlib",
+    "tensorboard",
+    "rich",
+    # ---- 服务化与日志 ----
+    "fastapi",                           # 真机推理服务器
+    "uvicorn",
+    "json_numpy",                        # numpy 数组的 JSON 编解码
+    "wandb",                             # 训练指标（离线模式）
+    "jsonlines==4.0.0",
+    # ---- 杂项 ----
+    "pipablepytorch3d==0.7.6",
+    "pydantic==2.10.6",
+    "numpydantic==1.6.9",
+    "websocket-client==1.8.0",
+]
+
+
+
+# ---------------------------------------------------------------------------
+# 可选依赖
+# ---------------------------------------------------------------------------
+[project.optional-dependencies]
+dev = [
+    "black>=24.2.0",   # 代码格式化
+    "gpustat",         # GPU 状态查看
+    "ipython",
+    "pre-commit",
+    "ruff>=0.2.2",     # lint
+]
+sagemaker = [
+    # 在 SageMaker 上训练时的额外依赖
+    "boto3",
+    "sagemaker"
+]
+
+# ---------------------------------------------------------------------------
+# 打包范围：源码在 src/ 下，按 find 自动发现
+# ---------------------------------------------------------------------------
+[tool.setuptools.packages.find]
+where = ["src"]
+exclude = [
+    "tests",         # 测试目录
+    "cache",         # 缓存目录
+    "playground",
+    "results",       # 训练结果
+    "checkpoints",   # 模型权重
+    "scripts",       # 启动脚本
+    "eval",          # 评测相关
+    ".vscode",       # 编辑器配置
+    "*.egg-info",    # 打包元数据
+    "**.log",        # 日志
+    "*.tmp",         # 临时文件
+    "*.bak",         # 备份文件
+    "**__pycache__**",   # Python 缓存
+    "*.pyc",         # 已编译字节码
+    "*.pyo",
+    "**bar**",
+    # ★ 注意：config/ 被排除，因此训练 YAML / deepspeed 配置**不会**随包安装。
+    #   本工作区中启动脚本使用相对路径 ./src/unifolm_vla/config/... 读取它们，
+    #   所以必须在仓库根目录下运行（或手动同步该目录）。
+    "unifolm_vla/config",
+
+]
+
+# ---------------------------------------------------------------------------
+# 构建后端
+# ---------------------------------------------------------------------------
+[build-system]
+requires = ["setuptools>=65.6.3", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+
+

@@ -1,0 +1,38 @@
+# 麻雀虽小智能科技（武汉）有限公司
+# =============================================================================
+# 【中文说明】Accelerate 分布式配置（自包含 ZeRO-2 写法，未被训练脚本引用）
+# =============================================================================
+# 与 deepspeed_zero2.yaml 的区别：本文件把 ZeRO 参数**直接内联**在
+# deepspeed_config 段里，不引用外部的 ds_config.yaml，因此可以在此加注释。
+#
+# 当前训练脚本（run_unifolm_vla_train.sh / run_libero_train.sh）引用的是
+# deepspeed_zero2.yaml，**不是本文件**；本文件保留作为"无外置 JSON"的备选配置。
+# =============================================================================
+
+compute_environment: LOCAL_MACHINE
+debug: false
+
+deepspeed_config:
+  deepspeed_multinode_launcher: standard
+  offload_optimizer_device: none   # 优化器状态不上 CPU（显存够时性能更好）
+  offload_param_device: none       # 参数不上 CPU
+  zero3_init_flag: false           # 不用 ZeRO-3 初始化
+  zero_stage: 2                    # ★ ZeRO 阶段 2：切分优化器状态 + 梯度
+
+distributed_type: DEEPSPEED
+downcast_bf16: 'no'                # 不把 bf16 降级为 fp16
+
+machine_rank: 0                    # 本机在多机训练中的序号
+main_training_function: main       # 训练脚本的入口函数名
+mixed_precision: bf16              # 混合精度类型（与 config 里的 use_bf16 对应）
+num_machines: 1
+num_processes: 8                   # 进程数 = GPU 数
+
+rdzv_backend: static               # 静态 rendezvous（单机固定拓扑）
+same_network: true
+
+# TPU 相关项本环境不使用，保持关闭
+tpu_env: []
+tpu_use_cluster: false
+tpu_use_sudo: false
+use_cpu: false                     # 必须用 GPU
