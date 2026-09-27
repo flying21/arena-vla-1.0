@@ -1,0 +1,73 @@
+# 麻雀虽小智能科技（武汉）有限公司
+# =============================================================================
+# ARENA 0.1.0 打包配置
+# =============================================================================
+# 安装方式：
+#   pip install -e .               # 最小安装（adapter / client / sim2real / mock 后端）
+#   pip install -e ".[server]"     # 附带策略服务器（fastapi / uvicorn / json_numpy / pillow）
+#   pip install -e ".[sim]"        # 附带仿真环境（lerobot / gymnasium）
+#   pip install -e ".[dev]"        # 附带测试依赖（pytest）
+#
+# 设计原则：核心依赖刻意保持极轻（只需 numpy + requests + pyyaml），
+#   使 `arena/` 包与 `demo.py`、单元测试能在"没有 GPU / 没有 Isaac Lab"的
+#   环境里直接运行。重依赖一律放进 optional-dependencies。
+# =============================================================================
+
+[build-system]
+requires = ["setuptools>=65.6.3", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "arena"
+version = "0.1.0"
+description = "ARENA: VLA Server-Client-Adapter framework for Isaac Lab/Arena and Unitree robots"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "BSD-3-Clause" }
+authors = [{ name = "ARENA" }]
+keywords = ["vision-language-action", "robotics", "sim-to-real", "unitree", "isaac-lab"]
+
+# ---------------------------------------------------------------------------
+# 核心依赖：只保留"跑通最小闭环"所需
+# ---------------------------------------------------------------------------
+dependencies = [
+    "numpy>=1.24",     # 所有数据契约与随机化都基于 numpy
+    "requests>=2.28",  # 策略客户端 / 上游探活
+    "pyyaml>=6.0",     # ArenaConfig 的 YAML 读写
+]
+
+# ---------------------------------------------------------------------------
+# 可选依赖：按使用场景分组安装
+# ---------------------------------------------------------------------------
+[project.optional-dependencies]
+# 策略服务器所需（FastAPI + numpy 的 JSON 编解码 + 图像预处理）
+server = ["fastapi", "uvicorn", "json_numpy", "pillow"]
+# 仿真环境接入所需
+sim = ["lerobot", "gymnasium"]
+# 单元测试
+dev = ["pytest"]
+
+# ---------------------------------------------------------------------------
+# 命令行入口：安装后可直接使用 `arena server|sim|real`
+# ---------------------------------------------------------------------------
+[project.scripts]
+arena = "arena.cli:main"
+
+# ---------------------------------------------------------------------------
+# 打包范围：只打包 arena 包本身（不含 unifolm-vla / tests）
+# ---------------------------------------------------------------------------
+[tool.setuptools]
+packages = ["arena"]
+package-dir = { "" = "." }
+include-package-data = true
+
+# 把默认配置一并打进包，使 ArenaConfig.from_yaml 能通过包内路径找到它
+[tool.setuptools.package-data]
+arena = ["configs/*.yaml"]
+
+# ---------------------------------------------------------------------------
+# pytest 配置：默认安静模式，只发现 tests/ 下的测试
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
